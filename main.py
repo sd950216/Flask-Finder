@@ -3,23 +3,30 @@ import webbrowser
 import ctypes
 import winsound
 import threading
-import time
 
-def get_local_ip():
+def get_local_ips():
+    local_ips = []
     try:
         host_name = socket.gethostname()
-        local_ip = socket.gethostbyname(host_name)
-        return local_ip
+        local_ips.append(socket.gethostbyname(host_name))
     except:
-        return "127.0.0.1"
+        pass
 
-def is_flask_app_alive(port):
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.1)
-            s.connect((get_local_ip(), port))
-        return True
-    except (socket.timeout, ConnectionRefusedError):
+        # Loop through common local IP ranges (adjust as needed)
+        for i in range(1, 256):
+            ip = f"192.168.1.{i}"
+            local_ips.append(ip)
+    except:
+        pass
+
+    return local_ips
+
+def is_flask_app_alive(ip, port):
+    try:
+        with socket.create_connection((ip, port), timeout=0.1):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError) as e:
         return False
 
 def play_sound(sound):
@@ -27,19 +34,25 @@ def play_sound(sound):
 
 def open_flask_app_in_browser():
     port = 5000
+    local_ips = get_local_ips()
 
-    if is_flask_app_alive(port):
-        url = f"http://{get_local_ip()}:{port}/"
-        webbrowser.open(url)
+    for ip in local_ips:
+        try:
+            if is_flask_app_alive(ip, port):
+                url = f"http://{ip}:{port}/"
+                webbrowser.open(url)
 
-        # Use threading to play the sound without waiting for the MessageBox
-        threading.Thread(target=play_sound, args=("SystemAsterisk",)).start()
+                # Use threading to play the sound without waiting for the MessageBox
+                threading.Thread(target=play_sound, args=("SystemAsterisk",)).start()
+                break
+        except Exception as e:
+            print(f"Error connecting to {ip}: {e}")
 
     else:
         # Use threading to play the sound without waiting for the MessageBox
         threading.Thread(target=play_sound, args=("SystemExclamation",)).start()
 
-        msg = "App is not running. Please start the app and try again.\n"
+        msg = "No running Flask app found on the local network."
         ctypes.windll.user32.MessageBoxW(0, msg, "Flask App Not Found", 0)
 
 if __name__ == "__main__":
